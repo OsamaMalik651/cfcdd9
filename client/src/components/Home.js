@@ -71,6 +71,7 @@ const Home = ({ user, logout }) => {
       } else {
         addMessageToConversation(data);
       }
+
       sendMessage(data, body);
     } catch (error) {
       console.error(error);
@@ -79,13 +80,16 @@ const Home = ({ user, logout }) => {
 
   const addNewConvo = useCallback(
     (recipientId, message) => {
-      const newConversations = [...conversations];
-      newConversations.forEach((convo) => {
+      const newConversations = conversations.map((convo) => {
+        const newConvo = { ...convo };
         if (convo.otherUser.id === recipientId) {
-          convo.messages.push(message);
-          convo.latestMessageText = message.text;
-          convo.id = message.conversationId;
+          const newMessages = [...convo.messages];
+          newMessages.push(message);
+          newConvo.messages = newMessages;
+          newConvo.latestMessageText = message.text;
+          return newConvo;
         }
+        return convo;
       });
       setConversations(newConversations);
     },
@@ -106,18 +110,21 @@ const Home = ({ user, logout }) => {
         setConversations((prev) => [newConvo, ...prev]);
       }
 
-      const newConversations = [...conversations];
-      newConversations.forEach((convo) => {
+      const newConversations = conversations.map((convo) => {
+        const newConvo = { ...convo };
         if (convo.id === message.conversationId) {
-          convo.messages.push(message);
-          convo.latestMessageText = message.text;
+          const newMessages = [...convo.messages];
+          newMessages.push(message);
+          newConvo.messages = newMessages;
+          newConvo.latestMessageText = message.text;
         }
+        return newConvo;
       });
+
       setConversations(newConversations);
     },
     [setConversations, conversations]
   );
-
   const setActiveChat = (username) => {
     setActiveConversation(username);
   };
@@ -184,6 +191,13 @@ const Home = ({ user, logout }) => {
     const fetchConversations = async () => {
       try {
         const { data } = await axios.get('/api/conversations');
+        data.forEach((conversation) => {
+          conversation.messages.sort((a, b) => {
+            return (
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+          });
+        });
         setConversations(data);
       } catch (error) {
         console.error(error);
