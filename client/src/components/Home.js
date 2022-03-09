@@ -81,12 +81,11 @@ const Home = ({ user, logout }) => {
   const addNewConvo = useCallback(
     (recipientId, message) => {
       const newConversations = conversations.map((convo) => {
-        const newConvo = { ...convo };
         if (convo.otherUser.id === recipientId) {
-          const newMessages = [...convo.messages];
-          newMessages.push(message);
-          newConvo.messages = newMessages;
+          const newConvo = { ...convo };
+          newConvo.messages = [...newConvo.messages, message];
           newConvo.latestMessageText = message.text;
+          newConvo.id = message.conversationId;
           return newConvo;
         }
         return convo;
@@ -111,14 +110,14 @@ const Home = ({ user, logout }) => {
       }
 
       const newConversations = conversations.map((convo) => {
-        const newConvo = { ...convo };
         if (convo.id === message.conversationId) {
-          const newMessages = [...convo.messages];
-          newMessages.push(message);
-          newConvo.messages = newMessages;
+          const newConvo = { ...convo };
+          newConvo.messages = [...newConvo.messages, message];
           newConvo.latestMessageText = message.text;
+          newConvo.id = message.conversationId;
+          return newConvo;
         }
-        return newConvo;
+        return convo;
       });
 
       setConversations(newConversations);
