@@ -10,6 +10,11 @@ const Message = db.define("message", {
     type: Sequelize.INTEGER,
     allowNull: false,
   },
+  isRead: {
+    type: Sequelize.BOOLEAN,
+    allowNull: true,
+    default: false,
+  },
 });
 
 module.exports = Message;
