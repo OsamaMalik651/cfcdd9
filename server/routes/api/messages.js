@@ -1,13 +1,47 @@
 const router = require("express").Router();
+const { Op } = require("sequelize");
 const { Conversation, Message } = require("../../db/models");
 const onlineUsers = require("../../onlineUsers");
 
+router.get("/", async (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.sendStatus(401);
+    }
+    const { senderId, conversationId } = req.query;
+    const userId = req.user.id;
+    const userBelongsToConversation = await Conversation.findOne({
+      where: {
+        id: conversationId,
+        [Op.or]: {
+          user1Id: userId,
+          user2Id: userId,
+        },
+      },
+    });
+    if (!userBelongsToConversation) {
+      return res.sendStatus(403);
+    }
+    const count = await Message.count({
+      where: {
+        senderId: senderId,
+        conversationId: conversationId,
+        isRead: false,
+      },
+    });
+    const response = count > 0 ? true : false;
+    res.send(response);
+  } catch (error) {
+    console.log(error);
+  }
+});
 // expects {recipientId, text, conversationId } in body (conversationId will be null if no conversation exists yet)
 router.post("/", async (req, res, next) => {
   try {
     if (!req.user) {
       return res.sendStatus(401);
     }
+
     const senderId = req.user.id;
     const { recipientId, text, conversationId, sender } = req.body;
 
@@ -51,6 +85,9 @@ router.post("/", async (req, res, next) => {
 
 router.put("/", async (req, res, next) => {
   try {
+    if (!req.user) {
+      return res.sendStatus(401);
+    }
     const { conversationId, senderId } = req.body;
     const response = await Message.update(
       {
@@ -63,7 +100,7 @@ router.put("/", async (req, res, next) => {
         },
       }
     );
-    res.sendStatus("200");
+    res.sendStatus(204);
   } catch (error) {
     next(error);
   }
