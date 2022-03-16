@@ -8,9 +8,7 @@ const Messages = (props) => {
 
   const lastMessage =
     messages &&
-    messages.filter(
-      (message) => message.isRead === true && message.senderId === userId
-    );
+    messages.filter((message) => message.isRead && message.senderId === userId);
 
   const lastMessageId = lastMessage.length ? lastMessage.pop().id : 0;
   return (

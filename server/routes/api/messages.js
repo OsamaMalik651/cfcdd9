@@ -29,10 +29,9 @@ router.get("/", async (req, res, next) => {
         isRead: false,
       },
     });
-    const response = count > 0 ? true : false;
-    res.send(response);
+    res.send(count > 0);
   } catch (error) {
-    console.log(error);
+    console.error(error);
   }
 });
 // expects {recipientId, text, conversationId } in body (conversationId will be null if no conversation exists yet)
