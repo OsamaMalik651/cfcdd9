@@ -17,12 +17,16 @@ const useStyles = makeStyles((theme) => ({
   },
 }));
 
-const Chat = ({ conversation, setActiveChat }) => {
+const Chat = ({ conversation, setActiveChat, activeConversation }) => {
   const classes = useStyles();
   const { otherUser } = conversation;
-
   const handleClick = async (conversation) => {
-    await setActiveChat(conversation.otherUser.username);
+    const data = {
+      username: conversation.otherUser.username,
+      conversationId: conversation.id,
+      senderId: conversation.otherUser.id,
+    };
+    await setActiveChat(data);
   };
 
   return (
@@ -33,7 +37,10 @@ const Chat = ({ conversation, setActiveChat }) => {
         online={otherUser.online}
         sidebar={true}
       />
-      <ChatContent conversation={conversation} />
+      <ChatContent
+        conversation={conversation}
+        activeConversation={activeConversation}
+      />
     </Box>
   );
 };

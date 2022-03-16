@@ -46,7 +46,11 @@ io.on("connection", (socket) => {
       sender: data.sender,
     });
   });
-
+  socket.on("chat-opened", (data) => {
+    socket.broadcast.emit("chat-opened", {
+      data,
+    });
+  });
   socket.on("logout", (id) => {
     if (onlineUsers.includes(id)) {
       userIndex = onlineUsers.indexOf(id);

@@ -21,6 +21,8 @@ const Home = ({ user, logout }) => {
 
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
+  const [checkForUnreadMessage, setCheckForUnreadMessage] = useState(false);
+  const [currentConversation, setCurrentConversation] = useState(null);
 
   const classes = useStyles();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -98,7 +100,7 @@ const Home = ({ user, logout }) => {
   const addMessageToConversation = useCallback(
     (data) => {
       // if sender isn't null, that means the message needs to be put in a brand new convo
-      const { message, sender = null } = data;
+      let { message, sender = null } = data;
       if (sender !== null) {
         const newConvo = {
           id: message.conversationId,
@@ -108,7 +110,23 @@ const Home = ({ user, logout }) => {
         newConvo.latestMessageText = message.text;
         setConversations((prev) => [newConvo, ...prev]);
       }
-
+      //Check if a message is received for an active conversation.
+      //If Yes, change the isRead property to True and update at the server as well
+      //before adding to local conversation state.
+      if (
+        activeConversation &&
+        message.conversationId ===
+          getActiveConversation(activeConversation).id &&
+        message.senderId !== user.id
+      ) {
+        message = { ...message, isRead: true };
+        const data = {
+          conversationId: message.conversationId,
+          senderId: message.senderId,
+        };
+        clearUnreadMessages(data);
+        chatOpened(data);
+      }
       const newConversations = conversations.map((convo) => {
         if (convo.id === message.conversationId) {
           const newConvo = { ...convo };
@@ -122,11 +140,29 @@ const Home = ({ user, logout }) => {
 
       setConversations(newConversations);
     },
-    [setConversations, conversations]
+    [setConversations, conversations, activeConversation]
   );
-  const setActiveChat = (username) => {
-    setActiveConversation(username);
+
+  const chatOpened = (data) => {
+    const { conversationId, senderId } = data;
+    socket.emit('chat-opened', {
+      conversationId,
+      senderId,
+    });
   };
+
+  const setActiveChat = useCallback((data) => {
+    const { username } = data;
+    setActiveConversation(username);
+    if (data.conversationId) {
+      const data1 = {
+        conversationId: data.conversationId,
+        senderId: data.senderId,
+      };
+      clearUnreadMessages(data1);
+      chatOpened(data);
+    }
+  });
 
   const addOnlineUser = useCallback((id) => {
     setConversations((prev) =>
@@ -156,6 +192,33 @@ const Home = ({ user, logout }) => {
     );
   }, []);
 
+  const fetchConversations = useCallback(async () => {
+    try {
+      const { data } = await axios.get('/api/conversations');
+      data.forEach((conversation) => {
+        conversation.messages.sort((a, b) => {
+          return (
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+        });
+      });
+      setConversations(data);
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
+
+  const chatOpenedbyReciepient = useCallback(
+    (data) => {
+      const data1 = {
+        conversationId: data.data.conversationId,
+        senderId: data.data.senderId,
+      };
+      clearUnreadMessages(data1);
+      fetchConversations();
+    },
+    [fetchConversations]
+  );
   // Lifecycle
 
   useEffect(() => {
@@ -163,6 +226,7 @@ const Home = ({ user, logout }) => {
     socket.on('add-online-user', addOnlineUser);
     socket.on('remove-offline-user', removeOfflineUser);
     socket.on('new-message', addMessageToConversation);
+    socket.on('chat-opened', chatOpenedbyReciepient);
 
     return () => {
       // before the component is destroyed
@@ -170,8 +234,15 @@ const Home = ({ user, logout }) => {
       socket.off('add-online-user', addOnlineUser);
       socket.off('remove-offline-user', removeOfflineUser);
       socket.off('new-message', addMessageToConversation);
+      socket.off('chat-opened', chatOpenedbyReciepient);
     };
-  }, [addMessageToConversation, addOnlineUser, removeOfflineUser, socket]);
+  }, [
+    addMessageToConversation,
+    addOnlineUser,
+    removeOfflineUser,
+    chatOpenedbyReciepient,
+    socket,
+  ]);
 
   useEffect(() => {
     // when fetching, prevent redirect
@@ -187,32 +258,81 @@ const Home = ({ user, logout }) => {
   }, [user, history, isLoggedIn]);
 
   useEffect(() => {
-    const fetchConversations = async () => {
-      try {
-        const { data } = await axios.get('/api/conversations');
-        data.forEach((conversation) => {
-          conversation.messages.sort((a, b) => {
-            return (
-              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-            );
-          });
-        });
-        setConversations(data);
-      } catch (error) {
-        console.error(error);
-      }
-    };
     if (!user.isFetching) {
       fetchConversations();
     }
   }, [user]);
+
+  const clearUnreadMessages = useCallback(async (data) => {
+    const response = await axios.put('/api/messages', data);
+    if (response.status === 204) {
+      await fetchConversations();
+    }
+  }, []);
+
+  const checkForUnreadMessagesfromOtherUser = useCallback(async (data) => {
+    const { conversationId, senderId } = data;
+    try {
+      let response = await axios.get('/api/messages/', {
+        params: {
+          senderId,
+          conversationId,
+        },
+      });
+      setCheckForUnreadMessage(response.data);
+    } catch (error) {}
+  });
+  const getActiveConversation = useCallback(
+    (activeConversation) => {
+      return conversations.find(
+        (conversation) => conversation.otherUser.username === activeConversation
+      );
+    },
+    [conversations]
+  );
+
+  useEffect(() => {
+    if (!activeConversation) return;
+    const conversation = getActiveConversation(activeConversation);
+    setCurrentConversation(conversation);
+    const data = {
+      conversationId: conversation.id,
+      senderId: conversation.otherUser.id,
+    };
+    if (activeConversation && !currentConversation) {
+      checkForUnreadMessagesfromOtherUser(data);
+    }
+  }, [
+    activeConversation,
+    getActiveConversation,
+    conversations,
+    currentConversation,
+    checkForUnreadMessagesfromOtherUser,
+  ]);
+
+  useEffect(() => {
+    if (activeConversation && currentConversation) {
+      const conversation = currentConversation;
+      const data = {
+        conversationId: conversation.id,
+        senderId: conversation.otherUser.id,
+      };
+      if (checkForUnreadMessage === true) {
+        clearUnreadMessages(data);
+      }
+    }
+  }, [
+    activeConversation,
+    currentConversation,
+    clearUnreadMessages,
+    checkForUnreadMessage,
+  ]);
 
   const handleLogout = async () => {
     if (user && user.id) {
       await logout(user.id);
     }
   };
-
   return (
     <>
       <Button onClick={handleLogout}>Logout</Button>
@@ -224,6 +344,7 @@ const Home = ({ user, logout }) => {
           clearSearchedUsers={clearSearchedUsers}
           addSearchedUsers={addSearchedUsers}
           setActiveChat={setActiveChat}
+          activeConversation={activeConversation}
         />
         <ActiveChat
           activeConversation={activeConversation}
